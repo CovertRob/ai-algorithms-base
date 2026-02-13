@@ -140,13 +140,14 @@ class HuffmanTree:
 			y = queue.extract_min()
 			queue.insert(HuffmanNode(freq=x.freq + y.freq, left=x, right=y))
 
-		return queue.extract_min()  # after combining n-1 nodes, the root has the lowest frequency
+		return queue.extract_min()  # after combining n-1 nodes, the root has the lowest frequency RF: (in the context of the priority queue)
 
 	def encode_chars(self):
 		"""Given the Huffman tree, create a dictionary mapping characters
 		to their Huffman codes.  The mapping for each character is a tuple giving
 		the number of bits in its Huffman code and an integer whose leading bits
 		are the Huffman code.  If a file of the Huffman tree is desired, write it out.
+		RF: Storing the huffman code in an 8bit byte by doing bitwise operations to set them based on the path taken in the tree (left = 0, right = 1).
 
 		Returns:
 		The dictionary mapping characters to their Huffman codes.

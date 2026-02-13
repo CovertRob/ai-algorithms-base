@@ -35,7 +35,8 @@ from dll_sentinel import DLLSentinel
 # Activities i and j are compatible if s[i] >= f[j] or s[j] >= f[i],
 # that is, if their intervals of time do not overlap.
 
-
+#RF:
+# This is still a greedy implementation, just recursive instead of iterative. The greedy choice is to select the first activity to finish, then recursively select from the remaining activities that start after the first one finishes.
 def recursive_activity_selector(s, f, k, n):
 	"""Select a maximum subset of mutually compatible activities.
 

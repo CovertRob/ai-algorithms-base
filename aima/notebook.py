@@ -1,4 +1,5 @@
 import time
+import builtins
 from collections import defaultdict
 from inspect import getsource
 
@@ -259,19 +260,31 @@ _canvas = """
 <script> var {0}_canvas_object = new Canvas("{0}");</script>
 """  # noqa
 
+_canvas_registry = {}
+
+
+def _dispatch_canvas_click(cid, x, y):
+    canvas_obj = _canvas_registry.get(cid)
+    if canvas_obj is None:
+        raise KeyError("No canvas object registered with cid={!r}".format(cid))
+    canvas_obj.mouse_click(x, y)
+
+
+builtins._aima_dispatch_canvas_click = _dispatch_canvas_click
+
 
 class Canvas:
     """Inherit from this class to manage the HTML canvas element in jupyter notebooks.
     To create an object of this class any_name_xyz = Canvas("any_name_xyz")
-    The first argument given must be the name of the object being created.
-    IPython must be able to reference the variable name that is being passed."""
+    The first argument is the canvas identifier used by JS callbacks."""
 
     def __init__(self, varname, width=800, height=600, cid=None):
         self.name = varname
         self.cid = cid or varname
         self.width = width
         self.height = height
-        self.html = _canvas.format(self.cid, self.width, self.height, self.name)
+        _canvas_registry[self.cid] = self
+        self.html = _canvas.format(self.cid, self.width, self.height, self.cid)
         self.exec_list = []
         display_html(self.html)
 
@@ -383,6 +396,13 @@ class Canvas_TicTacToe(Canvas):
 
     def __init__(self, varname, player_1='human', player_2='random',
                  width=300, height=350, cid=None):
+        aliases = {
+            'alphabeta': 'alpha_beta',
+            'alpha-beta': 'alpha_beta',
+            'alpha beta': 'alpha_beta'
+        }
+        player_1 = aliases.get(player_1, player_1)
+        player_2 = aliases.get(player_2, player_2)
         valid_players = ('human', 'random', 'alpha_beta')
         if player_1 not in valid_players or player_2 not in valid_players:
             raise TypeError("Players must be one of {}".format(valid_players))
@@ -394,6 +414,18 @@ class Canvas_TicTacToe(Canvas):
         self.players = (player_1, player_2)
         self.font("20px Arial")
         self.draw_board()
+        self.play_non_human_turns()
+
+    def play_non_human_turns(self):
+        while not self.ttt.terminal_test(self.state) and self.players[self.turn] != 'human':
+            player = self.players[self.turn]
+            if player == 'alpha_beta':
+                move = alpha_beta_player(self.ttt, self.state)
+            else:
+                move = random_player(self.ttt, self.state)
+            self.state = self.ttt.result(self.state, move)
+            self.turn ^= 1
+        self.draw_board()
 
     def mouse_click(self, x, y):
         player = self.players[self.turn]
@@ -401,7 +433,7 @@ class Canvas_TicTacToe(Canvas):
             if 0.55 <= x / self.width <= 0.95 and 6 / 7 <= y / self.height <= 6 / 7 + 1 / 8:
                 self.state = self.ttt.initial
                 self.turn = 0
-                self.draw_board()
+                self.play_non_human_turns()
             return
 
         if player == 'human':
@@ -410,13 +442,13 @@ class Canvas_TicTacToe(Canvas):
                 # Invalid move
                 return
             move = (x, y)
-        elif player == 'alpha_beta':
-            move = alpha_beta_player(self.ttt, self.state)
         else:
-            move = random_player(self.ttt, self.state)
+            # Ignore clicks while waiting for a non-human player and let the game advance automatically.
+            self.play_non_human_turns()
+            return
         self.state = self.ttt.result(self.state, move)
         self.turn ^= 1
-        self.draw_board()
+        self.play_non_human_turns()
 
     def draw_board(self):
         self.clear()
@@ -483,7 +515,7 @@ class Canvas_min_max(Canvas):
     """MinMax for Fig52Extended on HTML canvas"""
 
     def __init__(self, varname, util_list, width=800, height=600, cid=None):
-        super.__init__(varname, width, height, cid)
+        super().__init__(varname, width, height, cid)
         self.utils = {node: util for node, util in zip(range(13, 40), util_list)}
         self.game = Fig52Extended()
         self.game.utils = self.utils

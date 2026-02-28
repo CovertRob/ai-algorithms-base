@@ -14,18 +14,59 @@ function output_callback(out, block){
 	console.log(out.content);
 	return ;
     }
-    script = out.content.data['text/html'];
-    script = script.substr(8, script.length - 17);
-    eval(script)
+    var data = out && out.content ? out.content.data : null;
+    if (!data) {
+        return;
+    }
+
+    // Prefer explicit JS payloads when present.
+    var js = data['application/javascript'] || data['text/javascript'];
+    if (js) {
+        try {
+            eval(js);
+        } catch (err) {
+            console.error("Failed to execute JS payload:", err, js);
+        }
+        return;
+    }
+
+    // Fallback: extract script tags from HTML display payloads.
+    var html = data['text/html'];
+    if (!html || typeof html !== "string") {
+        return;
+    }
+    var re = /<script[^>]*>([\s\S]*?)<\/script>/gi;
+    var match;
+    while ((match = re.exec(html)) !== null) {
+        var scriptBody = match[1];
+        if (!scriptBody) {
+            continue;
+        }
+        try {
+            eval(scriptBody);
+        } catch (err) {
+            console.error("Failed to execute script from HTML payload:", err, scriptBody);
+        }
+    }
 }
 
-//Handles mouse click by calling mouse_click of Canvas object with the co-ordinates as arguments
-function click_callback(element, event, varname){
+//Handles mouse click by dispatching to the Python canvas object by canvas id (cid)
+function click_callback(element, event, cid){
     var rect = element.getBoundingClientRect();
     var x = event.clientX - rect.left;
     var y = event.clientY - rect.top;
-    var kernel = IPython.notebook.kernel;
-    var exec_str = varname + ".mouse_click(" + String(x) + ", " + String(y) + ")";
+    var kernel = null;
+    if (typeof IPython !== "undefined" && IPython.notebook && IPython.notebook.kernel) {
+        kernel = IPython.notebook.kernel;
+    } else if (typeof Jupyter !== "undefined" && Jupyter.notebook && Jupyter.notebook.kernel) {
+        kernel = Jupyter.notebook.kernel;
+    }
+    if (!kernel) {
+        console.error("Unable to find a notebook kernel bridge for canvas click callbacks.");
+        return;
+    }
+    var exec_str = "__import__('builtins')._aima_dispatch_canvas_click(" +
+        JSON.stringify(String(cid)) + ", " + String(x) + ", " + String(y) + ")";
     console.log(exec_str);
     kernel.execute(exec_str,{'iopub': {'output': output_callback}}, {silent: false});
 }
